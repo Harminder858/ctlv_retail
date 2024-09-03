@@ -83,22 +83,31 @@ def calculate_rfm_scores(summary):
     Calculate RFM scores as a fallback method.
     """
     logger.info("Calculating RFM scores")
-    r_labels = range(4, 0, -1)
-    f_labels = range(1, 5)
-    m_labels = range(1, 5)
     
-    r_quartiles = pd.qcut(summary['recency'], q=4, labels=r_labels)
-    f_quartiles = pd.qcut(summary['frequency'], q=4, labels=f_labels)
-    m_quartiles = pd.qcut(summary['monetary'], q=4, labels=m_labels)
+    # Ensure we're working with a copy of the data
+    summary = summary.copy()
     
-    summary['R'] = r_quartiles
-    summary['F'] = f_quartiles
-    summary['M'] = m_quartiles
+    # Recency: lower is better
+    summary['R_Score'] = pd.qcut(summary['recency'], q=4, labels=[4, 3, 2, 1])
     
-    summary['RFM_Score'] = summary['R'].astype(str) + summary['F'].astype(str) + summary['M'].astype(str)
-    summary['RFM_Score'] = summary['RFM_Score'].astype(int)
+    # Frequency: higher is better
+    summary['F_Score'] = pd.qcut(summary['frequency'], q=4, labels=[1, 2, 3, 4])
+    
+    # Monetary: higher is better
+    summary['M_Score'] = pd.qcut(summary['monetary'], q=4, labels=[1, 2, 3, 4])
+    
+    # Convert labels to integers
+    summary['R_Score'] = summary['R_Score'].astype(int)
+    summary['F_Score'] = summary['F_Score'].astype(int)
+    summary['M_Score'] = summary['M_Score'].astype(int)
+    
+    # Calculate RFM Score (for ranking purposes)
+    summary['RFM_Score'] = summary['R_Score'] + summary['F_Score'] + summary['M_Score']
     
     logger.info("RFM scores calculated")
+    logger.info(f"RFM score statistics:\n{summary['RFM_Score'].describe()}")
+    logger.info(f"Sample of RFM scores:\n{summary[['recency', 'frequency', 'monetary', 'R_Score', 'F_Score', 'M_Score', 'RFM_Score']].sample(5)}")
+    
     return summary
 
 def main():
@@ -116,7 +125,7 @@ def main():
     
     logger.info("Data preparation completed.")
     logger.info(f"Final summary data shape: {summary_data_with_rfm.shape}")
-    logger.info(summary_data_with_rfm.head())
+    logger.info(f"Sample of final data:\n{summary_data_with_rfm.sample(5)}")
 
 if __name__ == "__main__":
     main()
