@@ -3,6 +3,7 @@ from dash import dcc, html
 from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objs as go
 from src.data_preparation import load_data, clean_data, prepare_data_for_modeling, calculate_rfm_scores
 from src.model_fitting import fit_bg_nbd_model, fit_gamma_gamma_model
 from src.cltv_calculation import calculate_cltv
@@ -69,41 +70,4 @@ app.layout = html.Div([
     Output('distribution-plot', 'figure'),
     Input('top-n-slider', 'value')
 )
-def update_distribution_plot(top_n):
-    logger.info(f"Updating distribution plot for top {top_n} customers")
-    try:
-        if analysis_type == 'CLTV':
-            fig = px.histogram(result_df.nlargest(top_n, 'clv'), x='clv', nbins=20,
-                               title=f'CLTV Distribution (Top {top_n} Customers)')
-        else:
-            fig = px.histogram(result_df.nlargest(top_n, 'RFM_Score'), x='RFM_Score', nbins=20,
-                               title=f'RFM Score Distribution (Top {top_n} Customers)')
-        return fig
-    except Exception as e:
-        logger.error(f"Error in update_distribution_plot: {e}")
-        return px.histogram(title="Error in generating plot")
-
-@app.callback(
-    Output('top-customers', 'figure'),
-    Input('top-n-slider', 'value')
-)
-def update_top_customers(top_n):
-    logger.info(f"Updating top {top_n} customers plot")
-    try:
-        if analysis_type == 'CLTV':
-            top_customers = result_df.nlargest(top_n, 'clv')
-            fig = px.bar(top_customers, x=top_customers.index, y='clv',
-                         title=f'Top {top_n} Customers by CLTV')
-        else:
-            top_customers = result_df.nlargest(top_n, 'RFM_Score')
-            fig = px.bar(top_customers, x=top_customers.index, y='RFM_Score',
-                         title=f'Top {top_n} Customers by RFM Score')
-        return fig
-    except Exception as e:
-        logger.error(f"Error in update_top_customers: {e}")
-        return px.bar(title="Error in generating plot")
-
-logger.info("Dashboard setup completed.")
-
-if __name__ == '__main__':
-    app.run_server(debug=True)
+def update_distribution_plot(
