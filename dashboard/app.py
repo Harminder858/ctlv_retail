@@ -7,11 +7,14 @@ from src.data_preparation import load_data, clean_data, prepare_data_for_modelin
 from src.model_fitting import fit_bg_nbd_model, fit_gamma_gamma_model
 from src.cltv_calculation import calculate_cltv
 
+print("Starting data loading and preparation...")
 # Load and prepare data
 df = load_data('data/Online Retail.xlsx')
 df_clean = clean_data(df)
 summary_data = prepare_data_for_modeling(df_clean)
+print("Data preparation completed.")
 
+print("Starting model fitting...")
 # Fit models
 try:
     bg_nbd_model = fit_bg_nbd_model(summary_data)
@@ -19,6 +22,7 @@ try:
     
     # Calculate CLTV
     cltv_df = calculate_cltv(bg_nbd_model, gamma_gamma_model, summary_data)
+    print("CLTV calculation completed.")
 except ValueError as e:
     print(f"Error in model fitting or CLTV calculation: {e}")
     cltv_df = pd.DataFrame(columns=['CustomerID', 'clv'])
@@ -68,3 +72,4 @@ def update_top_customers(top_n):
                  title=f'Top {top_n} Customers by CLTV')
     return fig
 
+print("Dashboard setup completed.")
