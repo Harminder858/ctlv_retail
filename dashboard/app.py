@@ -6,7 +6,6 @@ import plotly.express as px
 from src.data_preparation import load_data, clean_data, prepare_data_for_modeling
 from src.model_fitting import fit_bg_nbd_model, fit_gamma_gamma_model
 from src.cltv_calculation import calculate_cltv
-import os
 
 # Load and prepare data
 df = load_data('data/Online Retail.xlsx')
@@ -22,7 +21,7 @@ cltv_df = calculate_cltv(bg_nbd_model, gamma_gamma_model, summary_data)
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
-server = app.server  # Expose the server variable for Render
+server = app.server  # Expose the server variable for Gunicorn
 
 # Define the layout
 app.layout = html.Div([
@@ -61,6 +60,3 @@ def update_top_customers(top_n):
                  title=f'Top {top_n} Customers by CLTV')
     return fig
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run_server(debug=False, host='0.0.0.0', port=port)
