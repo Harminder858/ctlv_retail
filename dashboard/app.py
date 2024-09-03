@@ -70,4 +70,46 @@ app.layout = html.Div([
     Output('distribution-plot', 'figure'),
     Input('top-n-slider', 'value')
 )
-def update_distribution_plot(
+def update_distribution_plot(top_n):
+    logger.info(f"Updating distribution plot for top {top_n} customers")
+    try:
+        if analysis_type == 'CLTV':
+            fig = px.histogram(result_df.nlargest(top_n, 'CLV'), x='CLV', nbins=20,
+                               title=f'CLTV Distribution (Top {top_n} Customers)')
+        else:
+            fig = px.histogram(result_df.nlargest(top_n, 'RFM_Score'), x='RFM_Score', nbins=20,
+                               title=f'RFM Score Distribution (Top {top_n} Customers)')
+        logger.info(f"Distribution plot created successfully")
+        return fig
+    except Exception as e:
+        logger.error(f"Error in update_distribution_plot: {e}")
+        return px.histogram(title="Error in generating plot")
+
+@app.callback(
+    Output('top-customers', 'figure'),
+    Input('top-n-slider', 'value')
+)
+def update_top_customers(top_n):
+    logger.info(f"Updating top {top_n} customers plot")
+    try:
+        if analysis_type == 'CLTV':
+            top_customers = result_df.nlargest(top_n, 'CLV')
+            fig = px.bar(top_customers, x=top_customers.index, y='CLV',
+                         title=f'Top {top_n} Customers by CLTV')
+        else:
+            top_customers = result_df.nlargest(top_n, 'RFM_Score')
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=top_customers.index, y=top_customers['R_Score'], name='Recency', marker_color='blue'))
+            fig.add_trace(go.Bar(x=top_customers.index, y=top_customers['F_Score'], name='Frequency', marker_color='green'))
+            fig.add_trace(go.Bar(x=top_customers.index, y=top_customers['M_Score'], name='Monetary', marker_color='red'))
+            fig.update_layout(barmode='group', title=f'Top {top_n} Customers by RFM Score (Grouped)')
+        logger.info(f"Top customers plot created successfully")
+        return fig
+    except Exception as e:
+        logger.error(f"Error in update_top_customers: {e}")
+        return px.bar(title="Error in generating plot")
+
+logger.info("Dashboard setup completed.")
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
