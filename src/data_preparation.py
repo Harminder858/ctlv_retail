@@ -1,16 +1,26 @@
 import pandas as pd
 import numpy as np
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def load_data(file_path):
     """
     Load the online retail dataset from an Excel file.
     """
-    return pd.read_excel(file_path, engine='openpyxl')
+    logger.info(f"Loading data from {file_path}")
+    df = pd.read_excel(file_path, engine='openpyxl')
+    logger.info(f"Data loaded. Shape: {df.shape}")
+    return df
 
 def clean_data(df):
     """
     Clean and preprocess the data.
     """
+    logger.info("Starting data cleaning")
+    initial_shape = df.shape
+    
     # Convert InvoiceDate to datetime if it's not already
     if df['InvoiceDate'].dtype != 'datetime64[ns]':
         df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
@@ -36,12 +46,14 @@ def clean_data(df):
         upper_bound = Q3 + (1.5 * IQR)
         df = df[(df[col] >= lower_bound) & (df[col] <= upper_bound)]
     
+    logger.info(f"Data cleaning completed. Initial shape: {initial_shape}, Final shape: {df.shape}")
     return df
 
 def prepare_data_for_modeling(df):
     """
     Prepare the data for CLTV modeling.
     """
+    logger.info("Preparing data for modeling")
     # Set the last date of the dataset
     last_date = df['InvoiceDate'].max()
     
@@ -63,12 +75,14 @@ def prepare_data_for_modeling(df):
     # Log transform monetary values
     summary['monetary'] = np.log1p(summary['monetary'])
     
+    logger.info(f"Data prepared for modeling. Shape: {summary.shape}")
     return summary
 
 def calculate_rfm_scores(summary):
     """
     Calculate RFM scores as a fallback method.
     """
+    logger.info("Calculating RFM scores")
     r_labels = range(4, 0, -1)
     f_labels = range(1, 5)
     m_labels = range(1, 5)
@@ -84,6 +98,7 @@ def calculate_rfm_scores(summary):
     summary['RFM_Score'] = summary['R'].astype(str) + summary['F'].astype(str) + summary['M'].astype(str)
     summary['RFM_Score'] = summary['RFM_Score'].astype(int)
     
+    logger.info("RFM scores calculated")
     return summary
 
 def main():
@@ -99,8 +114,9 @@ def main():
     # Calculate RFM scores as a fallback
     summary_data_with_rfm = calculate_rfm_scores(summary_data)
     
-    print("Data preparation completed.")
-    print(summary_data_with_rfm.head())
+    logger.info("Data preparation completed.")
+    logger.info(f"Final summary data shape: {summary_data_with_rfm.shape}")
+    logger.info(summary_data_with_rfm.head())
 
 if __name__ == "__main__":
     main()
