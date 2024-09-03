@@ -9,7 +9,7 @@ from src.cltv_calculation import calculate_cltv
 import os
 
 # Load and prepare data
-df = load_data('data/online_retail.csv')
+df = load_data('data/Online Retail.xlsx')
 df_clean = clean_data(df)
 summary_data = prepare_data_for_modeling(df_clean)
 
