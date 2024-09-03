@@ -35,7 +35,6 @@ def calculate_cltv(bg_nbd_model, gamma_gamma_model, summary_data, time_horizon=1
         return pd.DataFrame(columns=['CustomerID', 'CLV'])
 
 def main():
-    # This is just a placeholder. In a real scenario, you would load the models and summary data here.
     pass
 
 if __name__ == "__main__":
