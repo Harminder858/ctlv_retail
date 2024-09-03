@@ -6,34 +6,42 @@ import plotly.express as px
 from src.data_preparation import load_data, clean_data, prepare_data_for_modeling, calculate_rfm_scores
 from src.model_fitting import fit_bg_nbd_model, fit_gamma_gamma_model
 from src.cltv_calculation import calculate_cltv
+import logging
 
-print("Starting data loading and preparation...")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+logger.info("Starting data loading and preparation...")
 # Load and prepare data
 df = load_data('data/Online Retail.xlsx')
 df_clean = clean_data(df)
 summary_data = prepare_data_for_modeling(df_clean)
-print("Data preparation completed.")
+logger.info("Data preparation completed.")
 
-print("Starting model fitting...")
+logger.info("Starting model fitting...")
 # Fit models
 bg_nbd_model = fit_bg_nbd_model(summary_data)
 if bg_nbd_model is None:
-    print("Using RFM analysis as fallback method.")
+    logger.info("Using RFM analysis as fallback method.")
     summary_data_with_rfm = calculate_rfm_scores(summary_data)
     analysis_type = 'RFM'
     result_df = summary_data_with_rfm
 else:
     gamma_gamma_model = fit_gamma_gamma_model(summary_data)
     if gamma_gamma_model is not None:
-        print("CLTV calculation completed.")
+        logger.info("CLTV calculation completed.")
         cltv_df = calculate_cltv(bg_nbd_model, gamma_gamma_model, summary_data)
         analysis_type = 'CLTV'
         result_df = cltv_df
     else:
-        print("Using RFM analysis as fallback method.")
+        logger.info("Using RFM analysis as fallback method.")
         summary_data_with_rfm = calculate_rfm_scores(summary_data)
         analysis_type = 'RFM'
         result_df = summary_data_with_rfm
+
+logger.info(f"Analysis type: {analysis_type}")
+logger.info(f"Result dataframe shape: {result_df.shape}")
+logger.info(f"Result dataframe head:\n{result_df.head()}")
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -62,27 +70,40 @@ app.layout = html.Div([
     Input('top-n-slider', 'value')
 )
 def update_distribution_plot(top_n):
-    if analysis_type == 'CLTV':
-        fig = px.histogram(result_df.nlargest(top_n, 'clv'), x='clv', nbins=20,
-                           title=f'CLTV Distribution (Top {top_n} Customers)')
-    else:
-        fig = px.histogram(result_df.nlargest(top_n, 'RFM_Score'), x='RFM_Score', nbins=20,
-                           title=f'RFM Score Distribution (Top {top_n} Customers)')
-    return fig
+    logger.info(f"Updating distribution plot for top {top_n} customers")
+    try:
+        if analysis_type == 'CLTV':
+            fig = px.histogram(result_df.nlargest(top_n, 'clv'), x='clv', nbins=20,
+                               title=f'CLTV Distribution (Top {top_n} Customers)')
+        else:
+            fig = px.histogram(result_df.nlargest(top_n, 'RFM_Score'), x='RFM_Score', nbins=20,
+                               title=f'RFM Score Distribution (Top {top_n} Customers)')
+        return fig
+    except Exception as e:
+        logger.error(f"Error in update_distribution_plot: {e}")
+        return px.histogram(title="Error in generating plot")
 
 @app.callback(
     Output('top-customers', 'figure'),
     Input('top-n-slider', 'value')
 )
 def update_top_customers(top_n):
-    if analysis_type == 'CLTV':
-        top_customers = result_df.nlargest(top_n, 'clv')
-        fig = px.bar(top_customers, x=top_customers.index, y='clv',
-                     title=f'Top {top_n} Customers by CLTV')
-    else:
-        top_customers = result_df.nlargest(top_n, 'RFM_Score')
-        fig = px.bar(top_customers, x=top_customers.index, y='RFM_Score',
-                     title=f'Top {top_n} Customers by RFM Score')
-    return fig
+    logger.info(f"Updating top {top_n} customers plot")
+    try:
+        if analysis_type == 'CLTV':
+            top_customers = result_df.nlargest(top_n, 'clv')
+            fig = px.bar(top_customers, x=top_customers.index, y='clv',
+                         title=f'Top {top_n} Customers by CLTV')
+        else:
+            top_customers = result_df.nlargest(top_n, 'RFM_Score')
+            fig = px.bar(top_customers, x=top_customers.index, y='RFM_Score',
+                         title=f'Top {top_n} Customers by RFM Score')
+        return fig
+    except Exception as e:
+        logger.error(f"Error in update_top_customers: {e}")
+        return px.bar(title="Error in generating plot")
 
-print("Dashboard setup completed.")
+logger.info("Dashboard setup completed.")
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
