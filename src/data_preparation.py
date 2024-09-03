@@ -3,16 +3,17 @@ import numpy as np
 
 def load_data(file_path):
     """
-    Load the online retail dataset.
+    Load the online retail dataset from an Excel file.
     """
-    return pd.read_csv(file_path, encoding='unicode_escape')
+    return pd.read_excel(file_path, engine='openpyxl')
 
 def clean_data(df):
     """
     Clean and preprocess the data.
     """
-    # Convert InvoiceDate to datetime
-    df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
+    # Convert InvoiceDate to datetime if it's not already
+    if df['InvoiceDate'].dtype != 'datetime64[ns]':
+        df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
     
     # Calculate total amount
     df['TotalAmount'] = df['Quantity'] * df['UnitPrice']
@@ -48,7 +49,7 @@ def prepare_data_for_modeling(df):
 
 def main():
     # Load data
-    df = load_data('data/online_retail.csv')
+    df = load_data('data/Online Retail.xlsx')
     
     # Clean data
     df_clean = clean_data(df)
