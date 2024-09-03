@@ -13,11 +13,15 @@ df_clean = clean_data(df)
 summary_data = prepare_data_for_modeling(df_clean)
 
 # Fit models
-bg_nbd_model = fit_bg_nbd_model(summary_data)
-gamma_gamma_model = fit_gamma_gamma_model(summary_data)
-
-# Calculate CLTV
-cltv_df = calculate_cltv(bg_nbd_model, gamma_gamma_model, summary_data)
+try:
+    bg_nbd_model = fit_bg_nbd_model(summary_data)
+    gamma_gamma_model = fit_gamma_gamma_model(summary_data)
+    
+    # Calculate CLTV
+    cltv_df = calculate_cltv(bg_nbd_model, gamma_gamma_model, summary_data)
+except ValueError as e:
+    print(f"Error in model fitting or CLTV calculation: {e}")
+    cltv_df = pd.DataFrame(columns=['CustomerID', 'clv'])
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -46,6 +50,8 @@ app.layout = html.Div([
     Input('top-n-slider', 'value')
 )
 def update_cltv_histogram(top_n):
+    if cltv_df.empty:
+        return px.histogram(title="No CLTV data available")
     fig = px.histogram(cltv_df.nlargest(top_n, 'clv'), x='clv', nbins=20,
                        title=f'CLTV Distribution (Top {top_n} Customers)')
     return fig
@@ -55,6 +61,8 @@ def update_cltv_histogram(top_n):
     Input('top-n-slider', 'value')
 )
 def update_top_customers(top_n):
+    if cltv_df.empty:
+        return px.bar(title="No CLTV data available")
     top_customers = cltv_df.nlargest(top_n, 'clv')
     fig = px.bar(top_customers, x=top_customers.index, y='clv',
                  title=f'Top {top_n} Customers by CLTV')
