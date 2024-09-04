@@ -2,49 +2,46 @@ import dash
 from dash import dcc, html, dash_table
 from dash.dependencies import Input, Output, State
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objs as go
-from src.data_preparation import load_data, clean_data, prepare_data_for_modeling, calculate_rfm_scores
-from src.model_fitting import fit_bg_nbd_model, fit_gamma_gamma_model
-from src.cltv_calculation import calculate_cltv
+from lifetimes import BetaGeoFitter, GammaGammaFitter
+from lifetimes.utils import summary_data_from_transaction_data
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load and prepare data
-logger.info("Starting data loading and preparation...")
-df = load_data('data/Online Retail.xlsx')
-df_clean = clean_data(df)
-summary_data = prepare_data_for_modeling(df_clean)
-logger.info("Data preparation completed.")
+# Load data
+logger.info("Loading data...")
+df = pd.read_excel('data/Online Retail.xlsx')
 
-# Fit models and calculate CLTV or RFM
-logger.info("Starting model fitting...")
-bg_nbd_model = fit_bg_nbd_model(summary_data)
-if bg_nbd_model is None:
-    logger.info("Using RFM analysis as fallback method.")
-    result_df = calculate_rfm_scores(summary_data)
-    analysis_type = 'RFM'
-else:
-    gamma_gamma_model = fit_gamma_gamma_model(summary_data)
-    if gamma_gamma_model is not None:
-        logger.info("CLTV calculation completed.")
-        result_df = calculate_cltv(bg_nbd_model, gamma_gamma_model, summary_data)
-        analysis_type = 'CLTV'
-    else:
-        logger.info("Using RFM analysis as fallback method.")
-        result_df = calculate_rfm_scores(summary_data)
-        analysis_type = 'RFM'
+# Data preparation
+logger.info("Preparing data for CLTV analysis...")
+df['TotalAmount'] = df['Quantity'] * df['UnitPrice']
+summary_data = summary_data_from_transaction_data(
+    df, 'CustomerID', 'InvoiceDate', 'TotalAmount', 
+    observation_period_end=df['InvoiceDate'].max()
+)
 
-logger.info(f"Analysis type: {analysis_type}")
-logger.info(f"Result dataframe shape: {result_df.shape}")
+# Fit models and calculate CLTV
+logger.info("Fitting models and calculating CLTV...")
+bgf = BetaGeoFitter(penalizer_coef=0.01)
+bgf.fit(summary_data['frequency'], summary_data['recency'], summary_data['T'])
+
+ggf = GammaGammaFitter(penalizer_coef=0.01)
+ggf.fit(summary_data['frequency'], summary_data['monetary_value'])
+
+time_horizon = 12  # months
+cltv = ggf.customer_lifetime_value(
+    bgf, summary_data['frequency'], summary_data['recency'], summary_data['T'], 
+    summary_data['monetary_value'], time=time_horizon, freq='D', discount_rate=0.01
+)
+
+result_df = summary_data.join(cltv.rename('CLV'))
+
+logger.info(f"CLTV calculation completed. Result shape: {result_df.shape}")
 logger.info(f"Result dataframe head:\n{result_df.head()}")
-logger.info(f"Result dataframe description:\n{result_df.describe()}")
-logger.info(f"Number of unique values: {result_df.nunique()}")
-
-# Merge result_df with summary_data for additional insights
-result_df = result_df.merge(summary_data, left_index=True, right_index=True)
 
 # Initialize the Dash app
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
@@ -52,31 +49,31 @@ server = app.server
 
 # Define the layout
 app.layout = html.Div([
-    html.H1(f"{analysis_type} Dashboard"),
+    html.H1("Customer Lifetime Value (CLTV) Analysis Dashboard"),
+    
+    html.Div([
+        html.Label("Select number of customers to display:"),
+        dcc.Slider(
+            id='customer-slider',
+            min=10,
+            max=100,
+            step=10,
+            value=20,
+            marks={i: str(i) for i in range(10, 101, 10)},
+        ),
+    ], style={'width': '50%', 'margin': '20px auto'}),
     
     dcc.Tabs([
-        dcc.Tab(label='Overview', children=[
+        dcc.Tab(label='CLTV Overview', children=[
             html.Div([
-                html.H3('Distribution Plot'),
-                dcc.Graph(id='distribution-plot'),
+                html.H3('CLTV Distribution'),
+                dcc.Graph(id='cltv-distribution-plot'),
                 
-                html.H3('Scatter Plot'),
-                dcc.Graph(id='scatter-plot'),
+                html.H3('Recency vs Frequency'),
+                dcc.Graph(id='recency-frequency-plot'),
                 
-                html.H3('Top Customers'),
+                html.H3('Top Customers by CLTV'),
                 dcc.Graph(id='top-customers'),
-                
-                html.Div([
-                    html.Label('Select number of top customers:'),
-                    dcc.Slider(
-                        id='top-n-slider',
-                        min=5,
-                        max=100,
-                        step=5,
-                        value=20,
-                        marks={i: str(i) for i in range(0, 101, 10)}
-                    )
-                ])
             ])
         ]),
         dcc.Tab(label='Customer Details', children=[
@@ -84,7 +81,7 @@ app.layout = html.Div([
                 html.H3('Customer Information'),
                 dash_table.DataTable(
                     id='customer-table',
-                    columns=[{"name": i, "id": i} for i in result_df.columns],
+                    columns=[{"name": i, "id": i} for i in result_df.reset_index().columns],
                     data=result_df.reset_index().to_dict('records'),
                     page_size=10,
                     style_table={'overflowX': 'auto'},
@@ -102,66 +99,49 @@ app.layout = html.Div([
 ])
 
 @app.callback(
-    Output('distribution-plot', 'figure'),
-    Input('top-n-slider', 'value')
+    [Output('cltv-distribution-plot', 'figure'),
+     Output('recency-frequency-plot', 'figure'),
+     Output('top-customers', 'figure')],
+    Input('customer-slider', 'value')
 )
-def update_distribution_plot(top_n):
-    logger.info(f"Updating distribution plot for top {top_n} customers")
+def update_graphs(n_customers):
+    logger.info(f"Updating graphs for {n_customers} randomly selected customers")
     try:
-        if analysis_type == 'CLTV':
-            fig = px.histogram(result_df.nlargest(top_n, 'CLV'), x='CLV', nbins=20,
-                               title=f'CLTV Distribution (Top {top_n} Customers)')
-        else:
-            fig = px.histogram(result_df.nlargest(top_n, 'RFM_Score'), x='RFM_Score', nbins=20,
-                               title=f'RFM Score Distribution (Top {top_n} Customers)')
-        fig.update_layout(bargap=0.2)
-        return fig
+        # Randomly select customers
+        selected_customers = result_df.sample(n=n_customers)
+        
+        # CLTV Distribution
+        cltv_dist = px.histogram(selected_customers, x='CLV', nbins=20,
+                                 title=f'CLTV Distribution (Random {n_customers} Customers)')
+        cltv_dist.update_layout(
+            xaxis_title="Customer Lifetime Value",
+            yaxis_title="Count",
+            bargap=0.2
+        )
+        
+        # Recency vs Frequency
+        recency_freq = px.scatter(selected_customers, x='recency', y='frequency', 
+                                  size='monetary_value', color='CLV', hover_name=selected_customers.index,
+                                  title=f'Recency vs Frequency (Random {n_customers} Customers)')
+        recency_freq.update_layout(
+            xaxis_title="Recency (days)",
+            yaxis_title="Frequency",
+            coloraxis_colorbar_title="CLTV"
+        )
+        
+        # Top Customers
+        top_customers = selected_customers.nlargest(10, 'CLV')
+        top_cust_plot = px.bar(top_customers, x=top_customers.index, y='CLV',
+                               title=f'Top 10 Customers by CLTV (from Random {n_customers} Customers)')
+        top_cust_plot.update_layout(
+            xaxis_title="Customer ID",
+            yaxis_title="Customer Lifetime Value"
+        )
+        
+        return cltv_dist, recency_freq, top_cust_plot
     except Exception as e:
-        logger.error(f"Error in update_distribution_plot: {e}")
-        return px.histogram(title="Error in generating plot")
-
-@app.callback(
-    Output('scatter-plot', 'figure'),
-    Input('top-n-slider', 'value')
-)
-def update_scatter_plot(top_n):
-    logger.info(f"Updating scatter plot for top {top_n} customers")
-    try:
-        if analysis_type == 'CLTV':
-            fig = px.scatter(result_df.nlargest(top_n, 'CLV'), x='recency', y='frequency', 
-                             size='monetary', color='CLV', hover_name=result_df.index,
-                             title=f'Recency vs Frequency (Top {top_n} Customers)')
-        else:
-            fig = px.scatter(result_df.nlargest(top_n, 'RFM_Score'), x='recency', y='frequency', 
-                             size='monetary', color='RFM_Score', hover_name=result_df.index,
-                             title=f'Recency vs Frequency (Top {top_n} Customers)')
-        return fig
-    except Exception as e:
-        logger.error(f"Error in update_scatter_plot: {e}")
-        return px.scatter(title="Error in generating plot")
-
-@app.callback(
-    Output('top-customers', 'figure'),
-    Input('top-n-slider', 'value')
-)
-def update_top_customers(top_n):
-    logger.info(f"Updating top {top_n} customers plot")
-    try:
-        if analysis_type == 'CLTV':
-            top_customers = result_df.nlargest(top_n, 'CLV')
-            fig = px.bar(top_customers, x=top_customers.index, y='CLV',
-                         title=f'Top {top_n} Customers by CLTV')
-        else:
-            top_customers = result_df.nlargest(top_n, 'RFM_Score')
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=top_customers.index, y=top_customers['R_Score'], name='Recency', marker_color='blue'))
-            fig.add_trace(go.Bar(x=top_customers.index, y=top_customers['F_Score'], name='Frequency', marker_color='green'))
-            fig.add_trace(go.Bar(x=top_customers.index, y=top_customers['M_Score'], name='Monetary', marker_color='red'))
-            fig.update_layout(barmode='group', title=f'Top {top_n} Customers by RFM Score (Grouped)')
-        return fig
-    except Exception as e:
-        logger.error(f"Error in update_top_customers: {e}")
-        return px.bar(title="Error in generating plot")
+        logger.error(f"Error in update_graphs: {e}")
+        return px.histogram(title="Error in generating plot"), px.scatter(title="Error in generating plot"), px.bar(title="Error in generating plot")
 
 logger.info("Dashboard setup completed.")
 
