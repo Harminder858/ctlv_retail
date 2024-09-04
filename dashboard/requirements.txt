@@ -1,8 +1,8 @@
-pandas
-numpy
-matplotlib
-seaborn
-lifetimes
 dash
+dash-table
+pandas
 plotly
-pytest
+gunicorn
+lifetimes
+numpy
+openpyxl
